@@ -1,124 +1,125 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cyberpunk Space Shooter 2v2</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <script>
-        if (typeof Peer === 'undefined') {
-            document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');
-        }
-    </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Neon Strike</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+    if (typeof Peer === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');
+    }
+  </script>
 </head>
 <body>
-    <div id="damage-overlay"></div>
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        
-        <div id="ui-overlay">
-            
-            <!-- HUD -->
-            <div id="score-board" class="hidden">
-                <div class="team-card blue-card">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span id="p1-avatar" class="avatar-hud">👨‍🚀</span>
-                        <span class="team-title" id="p1-name">VOCÊ</span>
-                    </div>
-                    <div class="hp-bar-container"><div id="hp-blue-fill" class="hp-fill blue"></div></div>
-                </div>
+  <div id="damage-overlay"></div>
+  <div id="game-container">
+    <canvas id="gameCanvas" aria-label="Campo de jogo"></canvas>
 
-                <div id="hud-center">
-                    <button id="btn-fullscreen" class="icon-btn">🔲 Tela Cheia</button>
-                    <div class="special-container">
-                        <span class="special-label">ESPECIAL [E / SHIFT]</span>
-                        <div class="special-bar-bg"><div id="special-fill" class="special-fill"></div></div>
-                    </div>
-                </div>
-
-                <div class="team-card red-card">
-                    <span class="team-title">INIMIGO</span>
-                    <div class="hp-bar-container"><div id="hp-red-fill" class="hp-fill red"></div></div>
-                </div>
-            </div>
-
-            <!-- LOGIN / PROFILE SCREEN (Agario Style) -->
-            <div id="login-screen" class="screen">
-                <div class="agario-panel">
-                    <h1 class="glitch-title">NEON STRIKE</h1>
-                    <p class="subtitle">Identificação de Piloto</p>
-                    
-                    <div class="avatar-selector">
-                        <label><input type="radio" name="avatar" value="👨‍🚀" checked><span class="avatar-icon">👨‍🚀</span></label>
-                        <label><input type="radio" name="avatar" value="🤖"><span class="avatar-icon">🤖</span></label>
-                        <label><input type="radio" name="avatar" value="👽"><span class="avatar-icon">👽</span></label>
-                        <label><input type="radio" name="avatar" value="🧑‍🎤"><span class="avatar-icon">🧑‍🎤</span></label>
-                        <label><input type="radio" name="avatar" value="🥷"><span class="avatar-icon">🥷</span></label>
-                    </div>
-
-                    <input type="text" id="login-username" class="agario-input" placeholder="Seu Apelido" maxlength="15">
-                    <input type="password" id="login-password" class="agario-input" placeholder="Senha (Local)">
-                    
-                    <button id="btn-login" class="primary-btn cyan-btn" style="width: 100%; margin-top: 10px;">JOGAR</button>
-                    <p style="font-size: 10px; color:#555; margin-top:10px;">*Dados salvos localmente e protegidos via Hash B64.</p>
-                </div>
-            </div>
-
-            <!-- MAIN MENU -->
-            <div id="main-menu" class="screen hidden">
-                <div class="agario-panel">
-                    <div class="profile-header">
-                        <span id="menu-avatar" class="avatar-icon">👨‍🚀</span>
-                        <h2 id="menu-username">Piloto</h2>
-                        <button id="btn-logout" class="icon-btn">Sair</button>
-                    </div>
-
-                    <div class="menu-buttons">
-                        <div class="bot-mode-group">
-                            <button id="btn-mode-bot" class="primary-btn cyan-btn">🤖 VS BOT</button>
-                            <select id="bot-difficulty" class="agario-input select-diff">
-                                <option value="easy">Fácil</option>
-                                <option value="medium" selected>Médio</option>
-                                <option value="hard">Insano</option>
-                            </select>
-                        </div>
-                        <button id="btn-mode-1v1" class="primary-btn magenta-btn">⚔️ 1v1 ONLINE</button>
-                        <button id="btn-mode-2v2" class="primary-btn purple-btn">🚀 2v2 ONLINE</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- LOBBY -->
-<div id="multiplayer-lobby" class="hidden">
-  <h2>Lobby Multiplayer</h2>
-  
-  <div id="lobby-choices">
-    <button onclick="criarSala()">Criar Nova Sala</button>
-    <p>OU</p>
-    <input type="text" id="join-code" placeholder="Cole o código da sala aqui">
-    <button onclick="entrarNaSala()">Entrar na Sala</button>
-  </div>
-
-  <div id="host-panel" class="hidden">
-    <p>Código da sua sala:</p>
-    <h3 id="room-code-display">Gerando...</h3>
-    <p>Aguardando oponente...</p>
-  </div>
-
-  <button class="btn-voltar" onclick="voltarAoMenu()">Voltar ao Menu</button>
-</div>
-
-            <!-- GAME OVER -->
-            <div id="game-over-screen" class="screen hidden">
-                <div class="agario-panel">
-                    <h1 id="winner-title">VITÓRIA!</h1>
-                    <button id="btn-play-again" class="primary-btn cyan-btn" style="width: 100%;">Voltar ao Menu</button>
-                </div>
-            </div>
-
+    <div id="ui-overlay">
+      <div id="score-board" class="hidden">
+        <div class="team-card blue-card">
+          <div class="player-heading">
+            <span id="p1-avatar" class="avatar-hud">👨‍🚀</span>
+            <span class="team-title" id="p1-name">VOCÊ</span>
+          </div>
+          <div class="hp-bar-container"><div id="hp-blue-fill" class="hp-fill blue"></div></div>
         </div>
+
+        <div id="hud-center">
+          <button id="btn-fullscreen" class="icon-btn" type="button">🔲 Tela Cheia</button>
+          <div class="special-container">
+            <span class="special-label">ESPECIAL [E / SHIFT]</span>
+            <div class="special-bar-bg"><div id="special-fill" class="special-fill"></div></div>
+          </div>
+        </div>
+
+        <div class="team-card red-card">
+          <span class="team-title" id="enemy-name">INIMIGO</span>
+          <div class="hp-bar-container"><div id="hp-red-fill" class="hp-fill red"></div></div>
+        </div>
+      </div>
+
+      <div id="login-screen" class="screen">
+        <div class="agario-panel">
+          <h1 class="glitch-title">NEON STRIKE</h1>
+          <p class="subtitle">Identificação de Piloto</p>
+
+          <div class="avatar-selector" aria-label="Escolha seu avatar">
+            <label><input type="radio" name="avatar" value="👨‍🚀" checked><span class="avatar-icon">👨‍🚀</span></label>
+            <label><input type="radio" name="avatar" value="🤖"><span class="avatar-icon">🤖</span></label>
+            <label><input type="radio" name="avatar" value="👽"><span class="avatar-icon">👽</span></label>
+            <label><input type="radio" name="avatar" value="🧑‍🎤"><span class="avatar-icon">🧑‍🎤</span></label>
+            <label><input type="radio" name="avatar" value="🥷"><span class="avatar-icon">🥷</span></label>
+          </div>
+
+          <input type="text" id="login-username" class="agario-input" placeholder="Seu apelido" maxlength="15" autocomplete="nickname">
+          <input type="password" id="login-password" class="agario-input" placeholder="Senha local" autocomplete="off">
+          <button id="btn-login" class="primary-btn cyan-btn full-width" type="button">JOGAR</button>
+          <p class="small-note">Perfil salvo neste navegador. Não use uma senha importante aqui.</p>
+        </div>
+      </div>
+
+      <div id="main-menu" class="screen hidden">
+        <div class="agario-panel">
+          <div class="profile-header">
+            <span id="menu-avatar" class="avatar-icon">👨‍🚀</span>
+            <h2 id="menu-username">Piloto</h2>
+            <button id="btn-logout" class="icon-btn" type="button">Sair</button>
+          </div>
+
+          <div class="menu-buttons">
+            <div class="bot-mode-group">
+              <button id="btn-mode-bot" class="primary-btn cyan-btn" type="button">🤖 VS BOT</button>
+              <select id="bot-difficulty" class="agario-input select-diff" aria-label="Dificuldade do bot">
+                <option value="easy">Fácil</option>
+                <option value="medium" selected>Médio</option>
+                <option value="hard">Insano</option>
+              </select>
+            </div>
+
+            <button id="btn-mode-1v1" class="primary-btn magenta-btn" type="button">⚔️ 1v1 ONLINE</button>
+            <button id="btn-mode-2v2" class="primary-btn purple-btn" type="button">🚀 2v2 ONLINE</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="multiplayer-lobby" class="screen hidden">
+        <div class="agario-panel lobby-panel">
+          <h2>Lobby Multiplayer</h2>
+          <p id="peer-status-msg" class="status-connecting">Escolha criar uma sala ou entrar com um código.</p>
+
+          <div id="lobby-choices">
+            <button id="btn-create-room" class="primary-btn cyan-btn full-width" type="button">Criar Nova Sala</button>
+            <p class="or-label">OU</p>
+            <input type="text" id="join-code" class="agario-input" placeholder="Código da sala" maxlength="80" autocomplete="off">
+            <button id="btn-join-room" class="primary-btn magenta-btn full-width" type="button">Entrar na Sala</button>
+          </div>
+
+          <div id="host-panel" class="hidden">
+            <p id="room-code-caption">Código da sua sala:</p>
+            <div class="code-box">
+              <span id="room-code-display">Aguardando...</span>
+              <button id="btn-copy-code" type="button">Copiar</button>
+            </div>
+            <p id="host-waiting-label" class="lobby-hint">Aguardando oponente...</p>
+            <button id="btn-start-game" class="primary-btn cyan-btn full-width" type="button" disabled>Iniciar partida</button>
+          </div>
+
+          <button id="btn-back-menu" class="secondary-btn full-width back-button" type="button">Voltar ao Menu</button>
+        </div>
+      </div>
+
+      <div id="game-over-screen" class="screen hidden">
+        <div class="agario-panel">
+          <h1 id="winner-title">VITÓRIA!</h1>
+          <button id="btn-play-again" class="primary-btn cyan-btn full-width" type="button">Voltar ao Menu</button>
+        </div>
+      </div>
     </div>
-    <script src="script.js"></script>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>
