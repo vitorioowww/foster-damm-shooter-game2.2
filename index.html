@@ -90,31 +90,24 @@
             </div>
 
             <!-- LOBBY -->
-            <div id="lobby-screen" class="screen hidden">
-                <div class="agario-panel" style="max-width: 500px;">
-                    <h2 style="margin-bottom: 15px;">SALA DE ESPERA</h2>
-                    <div id="peer-status-msg" class="status-connecting">🔄 Conectando...</div>
-                    <div id="host-controls">
-                        <p>Código da Sala:</p>
-                        <div class="code-box">
-                            <span id="room-code">...</span>
-                            <button id="btn-copy-code">Copiar</button>
-                        </div>
-                    </div>
-                    <div id="join-controls">
-                        <div class="input-group">
-                            <input type="text" id="join-code-input" class="agario-input" placeholder="Código da sala...">
-                            <button id="btn-join-room" class="primary-btn magenta-btn">Entrar</button>
-                        </div>
-                    </div>
-                    <div id="players-list-box" style="margin-top:15px; text-align:left;">
-                        <h3>JOGADORES (<span id="player-count">1</span>/<span id="max-players">2</span>):</h3>
-                        <div id="slots-container"></div>
-                    </div>
-                    <button id="btn-start-game" class="primary-btn cyan-btn disabled" disabled style="width:100%; margin-top:15px;">Aguardando...</button>
-                    <button id="btn-back-menu" class="secondary-btn" style="width:100%; margin-top:10px;">Cancelar</button>
-                </div>
-            </div>
+<div id="multiplayer-lobby" class="hidden">
+  <h2>Lobby Multiplayer</h2>
+  
+  <div id="lobby-choices">
+    <button onclick="criarSala()">Criar Nova Sala</button>
+    <p>OU</p>
+    <input type="text" id="join-code" placeholder="Cole o código da sala aqui">
+    <button onclick="entrarNaSala()">Entrar na Sala</button>
+  </div>
+
+  <div id="host-panel" class="hidden">
+    <p>Código da sua sala:</p>
+    <h3 id="room-code-display">Gerando...</h3>
+    <p>Aguardando oponente...</p>
+  </div>
+
+  <button class="btn-voltar" onclick="voltarAoMenu()">Voltar ao Menu</button>
+</div>
 
             <!-- GAME OVER -->
             <div id="game-over-screen" class="screen hidden">
