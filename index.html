@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Shooter Arcade - 1v1 & 2v2 Multiplayer</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- PeerJS CDN para Conexão P2P Gratuita sem Servidor Pago -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="900" height="600"></canvas>
+        <div id="ui-overlay">
+            
+            <!-- BARRA DE PONTUAÇÃO -->
+            <div id="score-board" class="hidden">
+                <div class="team-score blue-team">
+                    <span id="blue-label">TIME AZUL</span>: <span id="score-blue">3</span> HP
+                </div>
+                <div id="game-mode-tag">MODO DE JOGO</div>
+                <div class="team-score red-team">
+                    <span id="red-label">TIME VERMELHO</span>: <span id="score-red">3</span> HP
+                </div>
+            </div>
+
+            <!-- MENU PRINCIPAL -->
+            <div id="main-menu" class="screen">
+                <h1>SPACE SHOOTER MULTIPLAYER</h1>
+                <p>Escolha o modo para jogar:</p>
+                <div class="menu-buttons">
+                    <button id="btn-mode-bot" class="primary-btn">🤖 1v1 vs BOT (Treinar Sozinho)</button>
+                    <button id="btn-mode-1v1" class="primary-btn">⚔️ 1v1 Online (2 Jogadores)</button>
+                    <button id="btn-mode-2v2" class="primary-btn">🚀 2v2 Online (4 Jogadores)</button>
+                </div>
+                <div class="controls-tip">
+                    <p>🎮 Controles: [A/D] ou [Setas] = Mover | [Espaço] = Atirar</p>
+                </div>
+            </div>
+
+            <!-- LOBBY ONLINE -->
+            <div id="lobby-screen" class="screen hidden">
+                <h2 id="lobby-title">Lobby de Espera</h2>
+                <div class="lobby-box">
+                    <div id="host-controls">
+                        <p>Código da sua Sala:</p>
+                        <div class="code-box">
+                            <span id="room-code">GERANDO...</span>
+                            <button id="btn-copy-code">Copiar Link/Código</button>
+                        </div>
+                        <p class="sub-text">Envie o código para o seu amigo entrar!</p>
+                    </div>
+
+                    <div id="join-controls">
+                        <p>Entrar em uma Sala Existente:</p>
+                        <div class="input-group">
+                            <input type="text" id="join-code-input" placeholder="Cole o código aqui...">
+                            <button id="btn-join-room">Entrar na Sala</button>
+                        </div>
+                    </div>
+
+                    <!-- LISTA DE JOGADORES -->
+                    <div id="players-list-box">
+                        <h3>Jogadores Conectados (<span id="player-count">1</span>/<span id="max-players">2</span>):</h3>
+                        <div id="slots-container">
+                            <div class="slot blue">1. Criador da Sala (Time Azul)</div>
+                            <div class="slot red" id="slot-2">2. Aguardando Jogador... (Time Vermelho)</div>
+                        </div>
+                    </div>
+
+                    <button id="btn-start-game" class="primary-btn disabled" disabled>Aguardando Jogadores...</button>
+                    <button id="btn-back-menu" class="secondary-btn">Voltar ao Menu</button>
+                </div>
+            </div>
+
+            <!-- TELA DE GAME OVER -->
+            <div id="game-over-screen" class="screen hidden">
+                <h1 id="winner-title">VITÓRIA!</h1>
+                <p id="winner-details">O Time Azul venceu a batalha!</p>
+                <button id="btn-play-again" class="primary-btn">Voltar ao Menu</button>
+            </div>
+
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
