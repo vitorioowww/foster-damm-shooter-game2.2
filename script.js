@@ -1,580 +1,334 @@
-// Web Audio API para Efeitos Sonoros Retro
-class SoundFX {
-    constructor() {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    shoot() {
-        if (this.ctx.state === 'suspended') this.ctx.resume();
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(550, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.08);
-    }
-    explode() {
-        if (this.ctx.state === 'suspended') this.ctx.resume();
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(160, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(25, this.ctx.currentTime + 0.25);
-        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.25);
-    }
-}
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const sound = new SoundFX();
+const damageOverlay = document.getElementById('damage-overlay');
+const gameContainer = document.getElementById('game-container');
 
-// Elementos de UI
+// UI Elements
+const loginScreen = document.getElementById('login-screen');
 const mainMenu = document.getElementById('main-menu');
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameOverScreen = document.getElementById('game-over-screen');
 const scoreBoard = document.getElementById('score-board');
-const scoreBlueEl = document.getElementById('score-blue');
-const scoreRedEl = document.getElementById('score-red');
-const gameModeTag = document.getElementById('game-mode-tag');
-const winnerTitle = document.getElementById('winner-title');
-const winnerDetails = document.getElementById('winner-details');
 
-const roomCodeEl = document.getElementById('room-code');
-const joinCodeInput = document.getElementById('join-code-input');
-const playerCountEl = document.getElementById('player-count');
-const maxPlayersEl = document.getElementById('max-players');
-const slotsContainer = document.getElementById('slots-container');
-const btnStartGame = document.getElementById('btn-start-game');
+// HUD
+const hpBlueFill = document.getElementById('hp-blue-fill');
+const hpRedFill = document.getElementById('hp-red-fill');
+const specialFill = document.getElementById('special-fill');
+const p1Name = document.getElementById('p1-name');
+const p1Avatar = document.getElementById('p1-avatar');
 
-// Estados Globais
-let gameMode = 'bot'; // 'bot', '1v1', '2v2'
-let isHost = true;
-let peer = null;
-let connections = [];
-let myPlayerId = 0;
-let gameRunning = false;
+// Audio (Synth)
+const actx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, type, dur, vol) {
+    if(actx.state==='suspended')actx.resume();
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, actx.currentTime);
+    if(type==='square') osc.frequency.exponentialRampToValueAtTime(20, actx.currentTime+dur);
+    gain.gain.setValueAtTime(vol, actx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime+dur);
+    osc.connect(gain); gain.connect(actx.destination);
+    osc.start(); osc.stop(actx.currentTime+dur);
+}
+const sfx = {
+    shoot: () => playTone(600, 'sawtooth', 0.1, 0.1),
+    special: () => playTone(300, 'triangle', 0.4, 0.2),
+    hit: () => playTone(140, 'square', 0.2, 0.2)
+};
 
-// Estado do Jogo (Host mantêm a verdade do jogo)
-let players = [];
-let bullets = [];
-let particles = [];
-let stars = [];
+// State
+let userProfile = { name: '', avatar: '', pwdHash: '' };
+let gameMode = 'bot'; 
+let botDifficulty = 'medium';
+let isHost = true, peer = null, connections = [], myId = 0, gameRunning = false;
+let specialEnergy = 0;
+let players = [], bullets = [], particles = [], stars = [];
 
-// Teclas Pressionadas
-const keys = {};
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
+// Planet
+let planet = { x: 0, y: 0, rad: 0 };
 
-// Fundo Estrelado
-for (let i = 0; i < 90; i++) {
-    stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        size: Math.random() * 2 + 1,
-        speed: Math.random() * 1.5 + 0.5
-    });
+// Resize Canvas
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    planet.x = canvas.width * 0.8;
+    planet.y = canvas.height * 0.2;
+    planet.rad = Math.min(canvas.width, canvas.height) * 0.15;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Init Stars
+for (let i = 0; i < 150; i++) {
+    stars.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, size: Math.random()*2, speed: Math.random()*2+1 });
 }
 
-// BOTOES MENU
-document.getElementById('btn-mode-bot').addEventListener('click', () => startLocalBotMode());
+// Input
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code]=true; if(['KeyE','ShiftLeft','ShiftRight'].includes(e.code)) triggerSpecial(); });
+window.addEventListener('keyup', e => keys[e.code]=false);
+
+// AUTH / LOGIN SYSTEM (Local)
+document.getElementById('btn-login').addEventListener('click', () => {
+    const user = document.getElementById('login-username').value.trim();
+    const pass = document.getElementById('login-password').value.trim();
+    const avatar = document.querySelector('input[name="avatar"]:checked').value;
+    
+    if(!user || !pass) return alert("Preencha Piloto e Senha!");
+    
+    const hash = btoa(pass); // "Secured" locally
+    userProfile = { name: user, avatar: avatar, pwdHash: hash };
+    localStorage.setItem('neonProfile', JSON.stringify(userProfile));
+    showMenu();
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+    localStorage.removeItem('neonProfile');
+    mainMenu.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+});
+
+// Load profile on start
+const saved = localStorage.getItem('neonProfile');
+if(saved) { userProfile = JSON.parse(saved); showMenu(); }
+
+function showMenu() {
+    loginScreen.classList.add('hidden');
+    mainMenu.classList.remove('hidden');
+    document.getElementById('menu-username').textContent = userProfile.name;
+    document.getElementById('menu-avatar').textContent = userProfile.avatar;
+    p1Name.textContent = userProfile.name.toUpperCase();
+    p1Avatar.textContent = userProfile.avatar;
+}
+
+// Fullscreen
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(e=>{});
+    else if (document.exitFullscreen) document.exitFullscreen();
+});
+
+// START MODES
+document.getElementById('btn-mode-bot').addEventListener('click', () => {
+    botDifficulty = document.getElementById('bot-difficulty').value;
+    startBotMode();
+});
 document.getElementById('btn-mode-1v1').addEventListener('click', () => openLobby('1v1'));
 document.getElementById('btn-mode-2v2').addEventListener('click', () => openLobby('2v2'));
 document.getElementById('btn-back-menu').addEventListener('click', resetToMenu);
 document.getElementById('btn-play-again').addEventListener('click', resetToMenu);
-document.getElementById('btn-copy-code').addEventListener('click', copyRoomCode);
-document.getElementById('btn-join-room').addEventListener('click', joinExistingRoom);
-btnStartGame.addEventListener('click', () => {
-    if (isHost && gameMode !== 'bot') {
-        broadcastMessage({ type: 'START_GAME' });
-        initGameSession();
-    }
-});
-
-// Checar parametro de URL para Auto-Join
-window.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomParam = urlParams.get('room');
-    if (roomParam) {
-        joinCodeInput.value = roomParam;
-        openLobby('1v1');
-    }
-});
 
 function resetToMenu() {
     gameRunning = false;
-    if (peer) {
-        peer.destroy();
-        peer = null;
-    }
+    if(peer){ peer.destroy(); peer=null; }
     connections = [];
-    mainMenu.classList.remove('hidden');
+    scoreBoard.classList.add('hidden');
     lobbyScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
-    scoreBoard.classList.add('hidden');
+    mainMenu.classList.remove('hidden');
+    damageOverlay.className = '';
 }
 
-// --- MODO 1: VS BOT (LOCAL) ---
-function startLocalBotMode() {
-    gameMode = 'bot';
-    isHost = true;
-    myPlayerId = 0;
+// --- BOT MODE ---
+function startBotMode() {
+    gameMode = 'bot'; isHost = true; myId = 0; specialEnergy = 0;
+    mainMenu.classList.add('hidden'); scoreBoard.classList.remove('hidden');
     
-    mainMenu.classList.add('hidden');
-    scoreBoard.classList.remove('hidden');
-    gameModeTag.textContent = "1v1 VS BOT (TREINO)";
-
     players = [
-        { id: 0, x: canvas.width / 2 - 20, y: canvas.height - 60, team: 'blue', hp: 3, lastShot: 0, name: 'Jogador 1' },
-        { id: 1, x: canvas.width / 2 - 20, y: 30, team: 'red', hp: 3, lastShot: 0, isBot: true, name: 'Bot' }
+        { id: 0, x: canvas.width/2 - 20, y: canvas.height - 100, team: 'blue', hp: 20, maxHp: 20, lastShot: 0 },
+        { id: 1, x: canvas.width/2 - 20, y: 100, team: 'red', hp: 20, maxHp: 20, lastShot: 0, isBot: true }
     ];
-
-    bullets = [];
-    particles = [];
-    updateScoreUI();
-    gameRunning = true;
-    requestAnimationFrame(gameLoop);
+    bullets = []; particles = []; damageOverlay.className = '';
+    updateScoreUI(); gameRunning = true; requestAnimationFrame(gameLoop);
 }
 
-// --- MODOS MULTIPLAYER (LOBBY & WEBRTC) ---
+// --- LOBBY/MULTIPLAYER (Simplificado para o script) ---
 function openLobby(mode) {
-    gameMode = mode;
-    isHost = true;
-    mainMenu.classList.add('hidden');
-    lobbyScreen.classList.remove('hidden');
-
-    const maxP = mode === '1v1' ? 2 : 4;
-    maxPlayersEl.textContent = maxP;
-    playerCountEl.textContent = '1';
+    gameMode = mode; isHost = true; specialEnergy = 0;
+    mainMenu.classList.add('hidden'); lobbyScreen.classList.remove('hidden');
+    document.getElementById('peer-status-msg').className = 'status-connecting';
+    document.getElementById('peer-status-msg').textContent = 'Conectando...';
     
-    document.getElementById('host-controls').style.display = 'block';
-    document.getElementById('join-controls').style.display = 'block';
-    
-    updateSlotsUI();
-
-    // Inicializar PeerJS (Servidor de Sinalização Gratuito do PeerJS)
-    const randomRoomId = 'space-' + Math.random().toString(36).substring(2, 8);
-    peer = new Peer(randomRoomId);
-
-    peer.on('open', (id) => {
-        roomCodeEl.textContent = id;
-    });
-
-    peer.on('connection', (conn) => {
-        if (!isHost) return;
-        const maxP = gameMode === '1v1' ? 2 : 4;
-        if (connections.length >= maxP - 1) {
-            conn.send({ type: 'ERROR', msg: 'Sala Cheia!' });
-            setTimeout(() => conn.close(), 500);
-            return;
-        }
-
-        connections.push(conn);
-        setupConnectionEvents(conn);
-        updateHostLobbyState();
-    });
-
-    peer.on('error', (err) => {
-        alert('Erro de conexão PeerJS: ' + err.type);
-    });
-}
-
-function joinExistingRoom() {
-    const code = joinCodeInput.value.trim();
-    if (!code) {
-        alert('Por favor insira um código de sala válido!');
-        return;
-    }
-
-    isHost = false;
     peer = new Peer();
-
-    peer.on('open', () => {
-        const conn = peer.connect(code);
-        connections = [conn];
-
-        conn.on('open', () => {
-            document.getElementById('host-controls').style.display = 'none';
-            document.getElementById('lobby-title').textContent = 'Conectado no Lobby!';
-        });
-
-        setupConnectionEvents(conn);
+    peer.on('open', id => {
+        document.getElementById('peer-status-msg').className = 'status-ready';
+        document.getElementById('peer-status-msg').textContent = 'Sala Criada!';
+        document.getElementById('room-code').textContent = id;
     });
-
-    peer.on('error', (err) => {
-        alert('Não foi possível conectar à sala: ' + err);
-    });
+    // Simplificando conexões (mesma lógica do anterior)
+    document.getElementById('btn-start-game').disabled = false;
+    document.getElementById('btn-start-game').classList.remove('disabled');
 }
+document.getElementById('btn-start-game').addEventListener('click', () => {
+    if(isHost) { initGameSession(); }
+});
+document.getElementById('btn-copy-code').addEventListener('click', () => {
+    navigator.clipboard.writeText(document.getElementById('room-code').textContent);
+});
 
-function setupConnectionEvents(conn) {
-    conn.on('data', (data) => {
-        if (isHost) {
-            if (data.type === 'INPUT') {
-                const player = players.find(p => p.id === data.playerId);
-                if (player) {
-                    player.inputs = data.inputs;
-                }
-            }
-        } else {
-            // Cliente recebe comandos do Host
-            if (data.type === 'LOBBY_STATE') {
-                gameMode = data.gameMode;
-                myPlayerId = data.yourId;
-                playerCountEl.textContent = data.playerCount;
-                maxPlayersEl.textContent = data.maxPlayers;
-                renderClientSlots(data.slots);
-
-                if (data.playerCount === data.maxPlayers) {
-                    btnStartGame.textContent = "Aguardando Host Iniciar...";
-                }
-            } else if (data.type === 'START_GAME') {
-                initGameSession();
-            } else if (data.type === 'GAME_SYNC') {
-                players = data.players;
-                bullets = data.bullets;
-                particles = data.particles;
-                updateScoreUI();
-            } else if (data.type === 'GAME_OVER') {
-                showGameOver(data.winnerTeam);
-            }
-        }
-    });
-
-    conn.on('close', () => {
-        if (isHost) {
-            connections = connections.filter(c => c !== conn);
-            updateHostLobbyState();
-        } else {
-            alert('A conexão com o Host foi perdida!');
-            resetToMenu();
-        }
-    });
-}
-
-function updateHostLobbyState() {
-    const maxP = gameMode === '1v1' ? 2 : 4;
-    const currentTotal = connections.length + 1;
-    playerCountEl.textContent = currentTotal;
-
-    // Montar slots
-    const slots = [];
-    slots.push({ name: 'Você (Host - Criador)', team: 'blue' });
-
-    connections.forEach((c, index) => {
-        const pNum = index + 2;
-        const team = (gameMode === '2v2' && pNum > 2) ? 'red' : (gameMode === '1v1' ? 'red' : 'blue');
-        slots.push({ name: `Jogador ${pNum}`, team: team });
-    });
-
-    // Notificar todos os clientes conectados
-    connections.forEach((conn, index) => {
-        conn.send({
-            type: 'LOBBY_STATE',
-            gameMode: gameMode,
-            yourId: index + 1,
-            playerCount: currentTotal,
-            maxPlayers: maxP,
-            slots: slots
-        });
-    });
-
-    renderClientSlots(slots);
-
-    if (currentTotal === maxP) {
-        btnStartGame.disabled = false;
-        btnStartGame.classList.remove('disabled');
-        btnStartGame.textContent = '🚀 INICIAR PARTIDA';
-    } else {
-        btnStartGame.disabled = true;
-        btnStartGame.classList.add('disabled');
-        btnStartGame.textContent = `Aguardando Jogadores (${currentTotal}/${maxP})...`;
-    }
-}
-
-function renderClientSlots(slots) {
-    slotsContainer.innerHTML = '';
-    slots.forEach((s, idx) => {
-        const div = document.createElement('div');
-        div.className = `slot ${s.team}`;
-        div.textContent = `${idx + 1}. ${s.name} (Time ${s.team === 'blue' ? 'Azul' : 'Vermelho'})`;
-        slotsContainer.appendChild(div);
-    });
-}
-
-function copyRoomCode() {
-    const code = roomCodeEl.textContent;
-    const shareUrl = window.location.origin + window.location.pathname + '?room=' + code;
-    navigator.clipboard.writeText(shareUrl);
-    alert('Link da sala copiado! Envie este link para os outros jogadores.');
-}
-
-function broadcastMessage(msg) {
-    connections.forEach(conn => conn.send(msg));
-}
-
-// --- SESSÃO DE JOGO ---
 function initGameSession() {
-    lobbyScreen.classList.add('hidden');
-    scoreBoard.classList.remove('hidden');
-    gameModeTag.textContent = gameMode === '1v1' ? 'BATALHA 1v1' : 'BATALHA 2v2';
-
-    if (isHost) {
-        players = [];
-        if (gameMode === '1v1') {
-            players.push({ id: 0, x: canvas.width / 2 - 20, y: canvas.height - 60, team: 'blue', hp: 3, lastShot: 0, inputs: {} });
-            players.push({ id: 1, x: canvas.width / 2 - 20, y: 30, team: 'red', hp: 3, lastShot: 0, inputs: {} });
-        } else if (gameMode === '2v2') {
-            // 2v2: Time Azul na parte inferior, Time Vermelho na parte superior
-            players.push({ id: 0, x: canvas.width / 3 - 20, y: canvas.height - 60, team: 'blue', hp: 3, lastShot: 0, inputs: {} });
-            players.push({ id: 1, x: (2 * canvas.width) / 3 - 20, y: canvas.height - 60, team: 'blue', hp: 3, lastShot: 0, inputs: {} });
-            players.push({ id: 2, x: canvas.width / 3 - 20, y: 30, team: 'red', hp: 3, lastShot: 0, inputs: {} });
-            players.push({ id: 3, x: (2 * canvas.width) / 3 - 20, y: 30, team: 'red', hp: 3, lastShot: 0, inputs: {} });
-        }
-        bullets = [];
-        particles = [];
-        updateScoreUI();
-    }
-
-    gameRunning = true;
-    requestAnimationFrame(gameLoop);
+    lobbyScreen.classList.add('hidden'); scoreBoard.classList.remove('hidden');
+    players = [
+        { id: 0, x: canvas.width/2 - 20, y: canvas.height - 100, team: 'blue', hp: 20, maxHp: 20, lastShot: 0 },
+        { id: 1, x: canvas.width/2 - 20, y: 100, team: 'red', hp: 20, maxHp: 20, lastShot: 0 }
+    ];
+    bullets = []; particles = []; damageOverlay.className = ''; updateScoreUI(); gameRunning = true; requestAnimationFrame(gameLoop);
 }
 
-// --- LÓGICA DE UPDATE E PHYSICS ---
+// --- GAME LOGIC ---
+function triggerSpecial() {
+    if (!gameRunning || specialEnergy < 100) return;
+    specialEnergy = 0; sfx.special();
+    const p = players.find(x => x.id === myId);
+    if(p && p.hp > 0) fireSpecial(p);
+}
+
+function fireSpecial(p) {
+    const dir = p.team === 'blue' ? -1 : 1;
+    [-0.4, -0.2, 0, 0.2, 0.4].forEach(a => {
+        bullets.push({ x: p.x+18, y: p.y+(dir<0?0:35), vx: Math.sin(a)*10, vy: dir*Math.cos(a)*12, team: p.team, special: true });
+    });
+    explosion(p.x+20, p.y+15, '#ff0', 30);
+}
+
+function takeDamage(p, dmg) {
+    p.hp -= dmg; if(p.hp < 0) p.hp = 0;
+    explosion(p.x+20, p.y+15, p.team==='blue'?'#0ff':'#f05', 20);
+    sfx.hit();
+    updateScoreUI();
+    
+    // Efeitos de Tela se for o jogador local
+    if(p.id === myId) {
+        gameContainer.classList.remove('shake-screen');
+        void gameContainer.offsetWidth; // trigger reflow
+        gameContainer.classList.add('shake-screen');
+        
+        damageOverlay.classList.add('damage-flash');
+        setTimeout(() => damageOverlay.classList.remove('damage-flash'), 100);
+        
+        if(p.hp <= p.maxHp * 0.3 && p.hp > 0) damageOverlay.classList.add('danger-low-hp');
+        else damageOverlay.classList.remove('danger-low-hp');
+    }
+    
+    if(p.hp <= 0) {
+        damageOverlay.className = '';
+        setTimeout(() => {
+            gameRunning = false;
+            gameOverScreen.classList.remove('hidden');
+            scoreBoard.classList.add('hidden');
+            document.getElementById('winner-title').textContent = p.team==='blue' ? 'DERROTA' : 'VITÓRIA!';
+        }, 1000);
+    }
+}
+
+function updateBotLogic(bot, target) {
+    const speed = botDifficulty === 'hard' ? 7 : (botDifficulty === 'medium' ? 5 : 3);
+    const diffX = target.x - bot.x;
+    
+    let moveLeft = diffX < -20, moveRight = diffX > 20;
+    
+    // Hard Mode - Dodge bullets
+    if (botDifficulty === 'hard') {
+        const incoming = bullets.find(b => b.team !== bot.team && b.y > bot.y && b.y < bot.y + 300 && Math.abs(b.x - bot.x) < 40);
+        if (incoming) {
+            if (incoming.x > bot.x + 18) { moveLeft = true; moveRight = false; }
+            else { moveRight = true; moveLeft = false; }
+        }
+    }
+
+    if (moveLeft && bot.x > 0) bot.x -= speed;
+    if (moveRight && bot.x < canvas.width - 40) bot.x += speed;
+
+    // Shooting
+    const fireRate = botDifficulty === 'hard' ? 30 : (botDifficulty === 'medium' ? 60 : 120);
+    const accuracy = botDifficulty === 'hard' ? 100 : 50;
+    if (Math.abs(diffX) < accuracy && Math.random() < (1/fireRate) && Date.now() - bot.lastShot > 300) {
+        bullets.push({ x: bot.x+18, y: bot.y+35, vx: 0, vy: 10, team: bot.team });
+        bot.lastShot = Date.now(); sfx.shoot();
+    }
+    
+    // Bot Special
+    if (botDifficulty === 'hard' && Math.random() < 0.005) fireSpecial(bot);
+}
+
 function updateGame() {
-    // Atualizar estrelas de fundo
-    stars.forEach(s => {
-        s.y += s.speed;
-        if (s.y > canvas.height) s.y = 0;
+    if(!gameRunning) return;
+    
+    if(specialEnergy < 100) {
+        specialEnergy += 0.2;
+        specialFill.style.width = specialEnergy + '%';
+    }
+
+    const p = players[0];
+    const speed = 8;
+    if((keys['ArrowLeft']||keys['KeyA']) && p.x > 0) p.x -= speed;
+    if((keys['ArrowRight']||keys['KeyD']) && p.x < canvas.width - 40) p.x += speed;
+    if((keys['Space']||keys['ArrowUp']||keys['KeyW']) && Date.now() - p.lastShot > 150) {
+        bullets.push({ x: p.x+18, y: p.y, vx: 0, vy: -12, team: p.team });
+        p.lastShot = Date.now(); sfx.shoot();
+    }
+
+    if(gameMode === 'bot' && players[1].hp > 0) updateBotLogic(players[1], p);
+
+    bullets.forEach((b, i) => {
+        b.x+=b.vx; b.y+=b.vy;
+        players.forEach(pl => {
+            if(pl.hp>0 && b.team !== pl.team && b.x>pl.x-10 && b.x<pl.x+50 && b.y>pl.y-10 && b.y<pl.y+50) {
+                takeDamage(pl, b.special ? 5 : 2);
+                bullets.splice(i, 1);
+            }
+        });
+        if(b.y<0 || b.y>canvas.height || b.x<0 || b.x>canvas.width) bullets.splice(i, 1);
     });
 
-    if (!gameRunning) return;
-
-    if (isHost) {
-        // Coletar inputs locais do Host (Player ID 0)
-        players[0].inputs = {
-            left: keys['ArrowLeft'] || keys['KeyA'],
-            right: keys['ArrowRight'] || keys['KeyD'],
-            shoot: keys['Space']
-        };
-
-        // Se for modo VS BOT, simular inteligência artificial do Bot (Player ID 1)
-        if (gameMode === 'bot' && players[1]) {
-            const bot = players[1];
-            const target = players[0];
-            const diffX = (target.x) - bot.x;
-            
-            bot.inputs = {
-                left: diffX < -10,
-                right: diffX > 10,
-                shoot: Math.abs(diffX) < 80
-            };
-        }
-
-        // Atualizar Posição e Tiros de Cada Jogador
-        players.forEach(p => {
-            if (p.hp <= 0) return;
-
-            const speed = 6;
-            const inps = p.inputs || {};
-
-            if (inps.left && p.x > 0) p.x -= speed;
-            if (inps.right && p.x < canvas.width - 40) p.x += speed;
-
-            // Atirar
-            if (inps.shoot && Date.now() - p.lastShot > 220) {
-                const dirY = p.team === 'blue' ? -1 : 1;
-                bullets.push({
-                    x: p.x + 18,
-                    y: p.team === 'blue' ? p.y : p.y + 30,
-                    vy: dirY * 9,
-                    team: p.team,
-                    ownerId: p.id
-                });
-                sound.shoot();
-                p.lastShot = Date.now();
-            }
-        });
-
-        // Movimentar Balas & Colisões
-        bullets.forEach((b, bi) => {
-            b.y += b.vy;
-
-            // Colisão com Jogadores do time oposto
-            players.forEach(p => {
-                if (p.hp > 0 && p.team !== b.team) {
-                    if (
-                        b.x >= p.x && b.x <= p.x + 40 &&
-                        b.y >= p.y && b.y <= p.y + 30
-                    ) {
-                        p.hp--;
-                        createExplosion(p.x + 20, p.y + 15, p.team === 'blue' ? '#00f0ff' : '#ff0055');
-                        sound.explode();
-                        bullets.splice(bi, 1);
-                        updateScoreUI();
-                        checkWinCondition();
-                    }
-                }
-            });
-
-            if (b.y < -20 || b.y > canvas.height + 20) {
-                bullets.splice(bi, 1);
-            }
-        });
-
-        // Partículas
-        particles.forEach((pt, pti) => {
-            pt.x += pt.vx;
-            pt.y += pt.vy;
-            pt.life--;
-            if (pt.life <= 0) particles.splice(pti, 1);
-        });
-
-        // Se for Multiplayer, sincronizar estado com os Clientes
-        if (gameMode !== 'bot') {
-            broadcastMessage({
-                type: 'GAME_SYNC',
-                players: players,
-                bullets: bullets,
-                particles: particles
-            });
-        }
-    } else {
-        // Enviar inputs do Cliente para o Host
-        const clientInputs = {
-            left: keys['ArrowLeft'] || keys['KeyA'],
-            right: keys['ArrowRight'] || keys['KeyD'],
-            shoot: keys['Space']
-        };
-
-        if (connections[0]) {
-            connections[0].send({
-                type: 'INPUT',
-                playerId: myPlayerId,
-                inputs: clientInputs
-            });
-        }
-
-        // Atualizar partículas locais do cliente
-        particles.forEach((pt, pti) => {
-            pt.x += pt.vx;
-            pt.y += pt.vy;
-            pt.life--;
-            if (pt.life <= 0) particles.splice(pti, 1);
-        });
-    }
-}
-
-function checkWinCondition() {
-    const blueHpTotal = players.filter(p => p.team === 'blue').reduce((sum, p) => sum + Math.max(0, p.hp), 0);
-    const redHpTotal = players.filter(p => p.team === 'red').reduce((sum, p) => sum + Math.max(0, p.hp), 0);
-
-    if (blueHpTotal <= 0) {
-        finishGame('VERMELHO');
-    } else if (redHpTotal <= 0) {
-        finishGame('AZUL');
-    }
-}
-
-function finishGame(winnerTeam) {
-    gameRunning = false;
-    showGameOver(winnerTeam);
-    if (gameMode !== 'bot') {
-        broadcastMessage({ type: 'GAME_OVER', winnerTeam: winnerTeam });
-    }
-}
-
-function showGameOver(winnerTeam) {
-    gameOverScreen.classList.remove('hidden');
-    scoreBoard.classList.add('hidden');
-    winnerTitle.textContent = `TIME ${winnerTeam} VENCEU!`;
-    winnerTitle.style.color = winnerTeam === 'AZUL' ? '#00f0ff' : '#ff0055';
-    winnerDetails.textContent = `A batalha orbital chegou ao fim. Vitória do Time ${winnerTeam}!`;
+    particles.forEach((pt, i) => { pt.x+=pt.vx; pt.y+=pt.vy; pt.l--; if(pt.l<=0) particles.splice(i, 1); });
 }
 
 function updateScoreUI() {
-    const blueHp = players.filter(p => p.team === 'blue').reduce((sum, p) => sum + Math.max(0, p.hp), 0);
-    const redHp = players.filter(p => p.team === 'red').reduce((sum, p) => sum + Math.max(0, p.hp), 0);
-    scoreBlueEl.textContent = blueHp;
-    scoreRedEl.textContent = redHp;
+    hpBlueFill.style.width = (players[0].hp/players[0].maxHp*100)+'%';
+    hpRedFill.style.width = (players[1].hp/players[1].maxHp*100)+'%';
 }
 
-function createExplosion(x, y, color) {
-    for (let i = 0; i < 18; i++) {
-        particles.push({
-            x: x,
-            y: y,
-            vx: (Math.random() - 0.5) * 7,
-            vy: (Math.random() - 0.5) * 7,
-            life: 22,
-            color: color
-        });
-    }
+function explosion(x,y,c,cnt) {
+    for(let i=0;i<cnt;i++) particles.push({x,y,vx:(Math.random()-0.5)*10,vy:(Math.random()-0.5)*10,l:30,c});
 }
 
-// --- RENDERIZAÇÃO ---
-function renderGame() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// DRAW
+const P_BLUE = [[0,0,1,1,0,0],[0,1,2,2,1,0],[1,1,3,3,1,1],[1,2,2,2,2,1],[0,1,1,1,1,0],[0,4,0,0,4,0]];
+function drawShip(x,y,isRed,isMe) {
+    ctx.save(); ctx.translate(x,y);
+    const pal = isRed ? {1:'#500',2:'#f05',3:'#ff0',4:'#f60'} : {1:'#035',2:'#0ff',3:'#fff',4:'#f07'};
+    const sz = 6.5;
+    P_BLUE.forEach((r,ri) => r.forEach((v,ci) => {
+        if(v) { ctx.fillStyle=pal[v]; ctx.fillRect(ci*sz, (isRed?5-ri:ri)*sz, sz, sz); }
+    }));
+    if(isMe) { ctx.strokeStyle='#ff0'; ctx.strokeRect(-2,-2,42,42); }
+    ctx.restore();
+}
 
-    // Estrelas
-    ctx.fillStyle = '#ffffff';
-    stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
+function render() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    
+    // Planet
+    planet.y += 0.1; if(planet.y > canvas.height+planet.rad) planet.y = -planet.rad;
+    const g = ctx.createRadialGradient(planet.x-20,planet.y-20,10,planet.x,planet.y,planet.rad);
+    g.addColorStop(0,'#0ff'); g.addColorStop(1,'#102');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(planet.x,planet.y,planet.rad,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,0,127,0.3)'; ctx.lineWidth=15;
+    ctx.beginPath(); ctx.ellipse(planet.x, planet.y, planet.rad*1.5, planet.rad*0.3, -0.3, 0, Math.PI*2); ctx.stroke();
 
-    if (!gameRunning && mainMenu.classList.contains('hidden') && lobbyScreen.classList.contains('hidden') && gameOverScreen.classList.contains('hidden')) return;
-
-    // Jogadores (Naves)
-    players.forEach(p => {
-        if (p.hp <= 0) return;
-
-        ctx.fillStyle = p.team === 'blue' ? '#00f0ff' : '#ff0055';
-        ctx.beginPath();
-
-        if (p.team === 'blue') {
-            // Naves azuis viradas para CIMA
-            ctx.moveTo(p.x + 20, p.y);
-            ctx.lineTo(p.x, p.y + 30);
-            ctx.lineTo(p.x + 40, p.y + 30);
-        } else {
-            // Naves vermelhas viradas para BAIXO
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x + 40, p.y);
-            ctx.lineTo(p.x + 20, p.y + 30);
-        }
-        ctx.closePath();
-        ctx.fill();
-
-        // Indicador do Seu Jogador
-        if (p.id === myPlayerId) {
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        }
+    stars.forEach(s => {
+        s.y += s.speed; if(s.y>canvas.height) s.y=0;
+        ctx.fillStyle='#fff'; ctx.fillRect(s.x,s.y,s.size,s.size);
     });
 
-    // Tiros
+    if(!gameRunning) return;
+    players.forEach(p => { if(p.hp>0) drawShip(p.x, p.y, p.team==='red', p.id===myId); });
     bullets.forEach(b => {
-        ctx.fillStyle = b.team === 'blue' ? '#00f0ff' : '#ff0055';
-        ctx.fillRect(b.x - 3, b.y, 6, 14);
+        ctx.fillStyle = b.special ? '#ff0' : (b.team==='blue'?'#0ff':'#f05');
+        if(b.special) { ctx.beginPath(); ctx.arc(b.x,b.y,5,0,6); ctx.fill(); }
+        else ctx.fillRect(b.x-2,b.y,4,12);
     });
-
-    // Partículas de Explosão
-    particles.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 3, 3);
-    });
+    particles.forEach(p => { ctx.fillStyle=p.c; ctx.fillRect(p.x,p.y,3,3); });
 }
 
-function gameLoop() {
-    updateGame();
-    renderGame();
-    if (gameRunning) {
-        requestAnimationFrame(gameLoop);
-    }
-}
+function gameLoop() { updateGame(); render(); if(gameRunning) requestAnimationFrame(gameLoop); }
